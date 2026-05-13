@@ -7,7 +7,7 @@ If applied correctly, this upgrade should change Hermes gateway behavior from "s
 Expected practical result:
 
 - prompt tokens in long Telegram chats become stable instead of growing with every message;
-- the agent can continue a topic using recent tail and scoped summaries;
+- the agent can continue a topic using recent tail and source-filtered summaries;
 - old topics stop leaking into new topics in the same chat;
 - important prior decisions remain recoverable through memory retrieval or `session_search`;
 - full transcripts remain available for audit and exact recovery.
@@ -38,16 +38,17 @@ Mitigation:
 - preserve recent tail;
 - store exact critical details in summaries;
 - keep raw transcripts searchable;
-- make retrieval scope strict by default;
+- use channel identity as a strict source/safety filter, not as a semantic context boundary;
 - add explicit failure paths for unavailable summarization.
-- require scoped transcript search before answering exact recall questions when summaries are insufficient.
+- require source-filtered transcript search before answering exact recall questions when summaries are insufficient.
 
 ## Readiness Criteria
 
 Consider the implementation ready only when:
 
 - gateway Telegram tests pass, not just CLI tests;
-- current chat/thread scope is used by default;
+- channel identity is used for source/safety filtering by default;
+- `chat_id` alone never causes old content to enter the prompt;
 - compressed parent sessions remain searchable;
 - prompt assembly has a clear token budget report;
 - retrieval confidence and fallback behavior are implemented;

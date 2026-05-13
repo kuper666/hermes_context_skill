@@ -4,6 +4,12 @@ This repository contains a standalone Hermes Agent skill for modernizing chat co
 
 The skill is designed for Hermes installations where long-running gateway chats gradually become expensive, slow, and semantically noisy because the agent keeps sending most of the current session history to the LLM.
 
+Core rule:
+
+```text
+Every LLM call must be built from scratch. Never replay channel history.
+```
+
 ## What This Skill Fixes
 
 Hermes can treat the active session as the main context container. In long Telegram chats this creates several problems:
@@ -12,7 +18,7 @@ Hermes can treat the active session as the main context container. In long Teleg
 - old topics keep leaking into new topics in the same chat;
 - summarization only reacts after context pressure appears;
 - exact old details can be lost or hallucinated after compression;
-- `session_search` and memory retrieval may be too global unless chat scope is enforced.
+- `session_search` and memory retrieval may be too global unless channel identity is used as a source/safety filter.
 
 This skill guides a Hermes-capable coding agent to replace that behavior with a retrieval-based context pipeline.
 
@@ -30,12 +36,14 @@ Hermes should move toward this:
 new user message
 + recent chat tail
 + current-topic working summary
-+ scoped retrieved memory chunks
++ source-filtered retrieved memory chunks
 + exact transcript recovery when needed
 -> LLM
 ```
 
 The full transcript remains persisted as the audit log. It is not deleted and should remain searchable for exact recovery.
+
+Telegram is only the transport. `chat_id` is not a semantic session boundary and must not decide what enters the prompt by itself.
 
 ## Why It Is Effective
 
@@ -45,7 +53,7 @@ The skill changes the source of context:
 session-based context -> retrieval-based context
 ```
 
-This means each turn receives a bounded, freshly assembled prompt instead of inheriting the entire growing chat. In practice this should reduce input token usage significantly in long Telegram chats while preserving recall through scoped memory, summaries, and transcript search.
+This means each turn receives a bounded, freshly assembled prompt instead of inheriting the entire growing chat. In practice this should reduce input token usage significantly in long Telegram chats while preserving recall through source-filtered memory, summaries, and transcript search.
 
 Expected impact:
 
@@ -99,9 +107,9 @@ https://github.com/kuper666/hermes_context_skill
 Use the skill in skills/hermes-retrieval-context.
 Read AGENT_TASK.md first.
 
-Modernize the installed Hermes gateway chat context flow so Telegram and other gateway channels stop sending full session history to the LLM on every turn. Implement a bounded retrieval-based Context Assembler with scoped memory retrieval, recent tail preservation, logical summary checkpoints, transcript recovery for exact details, and explicit low-confidence fallback behavior.
+Modernize the installed Hermes gateway chat context flow so Telegram and other gateway channels stop sending full session history to the LLM on every turn. Every LLM call must be built from scratch; never replay channel history. Implement a bounded retrieval-based Context Assembler with source-filtered memory retrieval, recent tail preservation, logical summary checkpoints, transcript recovery for exact details, and explicit low-confidence fallback behavior.
 
-Do not delete or truncate raw transcripts. Do not implement a broad rewrite. Inspect the installed Hermes version first, choose the least invasive integration point, and validate Telegram/gateway behavior.
+Do not delete or truncate raw transcripts. Do not use `chat_id` as a semantic context boundary; use it only as a source and safety filter for retrieval. Do not implement a broad rewrite. Inspect the installed Hermes version first, choose the least invasive integration point, and validate Telegram/gateway behavior.
 ```
 
 ## Quality Guardrails
@@ -111,8 +119,8 @@ This skill is intentionally conservative. It requires the implementing agent to 
 - keeping raw transcripts searchable;
 - preserving a recent tail for conversational continuity;
 - storing exact critical details in summary chunks;
-- defaulting retrieval to the current chat/thread scope;
-- running scoped transcript search before answering exact recall questions when summaries are insufficient;
+- using channel identity only as a source/safety filter, not as the meaning of the current conversation;
+- running source-filtered transcript search before answering exact recall questions when summaries are insufficient;
 - refusing to reconstruct exact old commands, IDs, errors, URLs, dates, or file paths from weak memory matches.
 
 ## When Not To Use

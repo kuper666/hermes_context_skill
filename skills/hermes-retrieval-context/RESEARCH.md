@@ -11,7 +11,7 @@ Hermes already has several building blocks that should be reused instead of bypa
 - `agent/prompt_builder.py` builds the stable system prompt from memory, skills, context files, and personality.
 - `session_search` can search persisted sessions and should be used for exact recovery from old transcripts.
 
-The built-in compression model is still session-oriented. It reduces message volume only after pressure appears, while the desired architecture assembles a small context from scratch on every turn.
+The built-in compression model is still session-oriented. It reduces message volume only after pressure appears, while the desired architecture assembles a small context from scratch on every turn. Every LLM call should be built from scratch; channel history must not be replayed by default.
 
 ## Existing Context Compression
 
@@ -46,15 +46,16 @@ Implementation impact:
 - Fail visibly when summarization cannot run.
 - Do not treat raw previews as valid durable summaries.
 
-### `session_search` should be scoped to current chat
+### `session_search` should be source-filtered by current channel identity
 
 Reported behavior: gateway conversations may search globally across all sessions rather than the current Telegram DM, topic, Discord thread, or Slack thread.
 
 Implementation impact:
 
-- Retrieval must default to current chat/thread scope.
+- Retrieval must use current channel identity as a source and safety filter.
+- `chat_id` must not become a semantic context boundary.
 - Global retrieval must be explicit.
-- Scope should use the same identity fields as gateway session routing, not only `user_id`.
+- Source filtering should use the same identity fields as gateway session routing, not only `user_id`.
 
 ### Compression-ended parents excluded from search
 

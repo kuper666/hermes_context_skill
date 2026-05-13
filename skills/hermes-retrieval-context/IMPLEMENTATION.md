@@ -4,11 +4,11 @@
 
 ```text
 Inbound gateway message
-  -> resolve chat scope
+  -> resolve channel source identity
   -> append raw message to transcript
   -> detect topic/task boundary
   -> summarize completed logical chunk when needed
-  -> retrieve relevant scoped memory chunks
+  -> retrieve relevant source-filtered memory chunks
   -> assemble bounded prompt
   -> call LLM
   -> persist assistant response
@@ -16,6 +16,8 @@ Inbound gateway message
 ```
 
 The transcript remains complete. The LLM never receives the full transcript by default.
+
+Every LLM call must be built from scratch. Never replay channel history. Telegram `chat_id` is only a source/safety filter for search and isolation, not a semantic session boundary.
 
 ## Step 1: Inspect Installed Hermes
 
@@ -41,9 +43,9 @@ Preferred order:
 
 The chosen code path must run for Telegram and other gateway channels, not only CLI.
 
-## Step 3: Define Scope Identity
+## Step 3: Define Source Identity
 
-Create a normalized context scope using the same fields as session routing:
+Create a normalized channel source identity using the same fields as session routing:
 
 ```text
 platform
@@ -55,7 +57,7 @@ session_id
 lineage_root_id
 ```
 
-Use the scope for reads and writes. In group chats, include user isolation rules exactly as Hermes gateway does.
+Use this identity for reads, writes, search filtering, and safety isolation. Do not use it as the semantic boundary for what enters the prompt. In group chats, include user isolation rules exactly as Hermes gateway does.
 
 ## Step 4: Add Context Assembler
 
@@ -63,7 +65,7 @@ The assembler should expose a simple contract:
 
 ```python
 class ContextAssembler:
-    def assemble(self, *, scope, user_message, recent_messages, system_message, token_budget):
+    def assemble(self, *, source_identity, user_message, recent_messages, system_message, token_budget):
         ...
 ```
 
@@ -81,6 +83,8 @@ Recommended output fields:
 Keep this component deterministic and testable without network calls.
 
 The assembler is the quality gate. It must be the single place where the final prompt is built, budgeted, and logged. Do not leave a parallel code path that still forwards full gateway history during normal turns.
+
+The assembler must decide prompt inclusion by current user intent, topic continuity, recency, and retrieval relevance. It must not include old content merely because it shares the same `chat_id`.
 
 ## Step 5: Message Tail Policy
 
@@ -111,7 +115,7 @@ Use cheap deterministic signals first. Use an auxiliary LLM only when needed for
 
 Use the best store already available in the installed Hermes:
 
-- existing memory provider if it supports scoped semantic search;
+- existing memory provider if it supports source-filtered semantic search;
 - SQLite FTS5 with embeddings sidecar if no provider is configured;
 - `session_search` only as a recovery tool, not as the primary every-turn context source.
 
@@ -119,7 +123,7 @@ Each chunk should store:
 
 ```text
 chunk_id
-scope identity
+source identity
 topic label
 summary text
 keywords
@@ -137,14 +141,14 @@ Never store secrets. Store references to secret locations instead.
 For every inbound message:
 
 1. Build a compact query from the current user message and the current topic label.
-2. Search current chat/thread scope.
+2. Filter search by current channel source identity first.
 3. If the user explicitly asks about broader history, search same user across channels.
 4. Use global search only for explicit global recall requests.
 5. Rank results by semantic relevance, lexical match, recency, unresolved status, and topic match.
 6. Return 2-6 chunks within budget.
 7. Deduplicate facts and prefer newer resolved decisions over older guesses.
 
-Return retrieval confidence with the assembled context. Low confidence must not be treated as valid memory. If confidence is low, expand scoped retrieval, search raw transcripts for exact details, or ask a concise clarification.
+Return retrieval confidence with the assembled context. Low confidence must not be treated as valid memory. If confidence is low, expand source-filtered retrieval, search raw transcripts for exact details, or ask a concise clarification.
 
 ## Step 9: Prompt Shape
 
@@ -153,7 +157,7 @@ Assemble in this order:
 ```text
 system message
 memory snapshot from Hermes prompt builder
-retrieved scoped context block
+retrieved source-filtered context block
 current-topic working summary
 recent tail
 current user message
@@ -181,9 +185,10 @@ Validate these scenarios manually or with integration tests:
 
 - Long Telegram DM continues past the old compression threshold without full-history prompts.
 - User switches from "server deployment" to "vacation planning"; old server details do not enter prompt.
+- Old content from the same `chat_id` does not enter the prompt unless it matches current intent.
 - User later asks "what did we decide about deployment?"; relevant server summary is retrieved.
 - User asks for an exact error from an old compressed turn; session search can recover it.
-- User asks for an old command that is absent from summaries; scoped transcript search runs before the answer.
+- User asks for an old command that is absent from summaries; source-filtered transcript search runs before the answer.
 - Telegram group topic A does not see memory from topic B.
 - Two different users in the same group do not share private memory unless Hermes is configured for shared group memory.
 
@@ -192,7 +197,7 @@ Validate these scenarios manually or with integration tests:
 Add focused tests for:
 
 - assembler budget enforcement;
-- scope filtering;
+- source filtering without treating `chat_id` as semantic context;
 - topic switch tail shrink;
 - tool call/result pair preservation;
 - retrieval ranking;
