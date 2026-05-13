@@ -17,7 +17,7 @@ Inbound gateway message
 
 The transcript remains complete. The LLM never receives the full transcript by default.
 
-Every LLM call must be built from scratch. Never replay channel history. Telegram `chat_id` is only a source/safety filter for search and isolation, not a semantic session boundary.
+Every LLM call must be built from scratch. Never replay channel history. Default retrieval target is current user + current task/topic. Telegram `chat_id` is only a source/safety filter for search and isolation, not a semantic session boundary.
 
 ## Step 1: Inspect Installed Hermes
 
@@ -59,6 +59,8 @@ lineage_root_id
 
 Use this identity for reads, writes, search filtering, and safety isolation. Do not use it as the semantic boundary for what enters the prompt. In group chats, include user isolation rules exactly as Hermes gateway does.
 
+Semantic context is selected by current user, current task/topic, intent, recency, and retrieval relevance.
+
 ## Step 4: Add Context Assembler
 
 The assembler should expose a simple contract:
@@ -84,7 +86,7 @@ Keep this component deterministic and testable without network calls.
 
 The assembler is the quality gate. It must be the single place where the final prompt is built, budgeted, and logged. Do not leave a parallel code path that still forwards full gateway history during normal turns.
 
-The assembler must decide prompt inclusion by current user intent, topic continuity, recency, and retrieval relevance. It must not include old content merely because it shares the same `chat_id`.
+The assembler must decide prompt inclusion by current user, current task/topic, intent, topic continuity, recency, and retrieval relevance. It must not include old content merely because it shares the same `chat_id`.
 
 ## Step 5: Message Tail Policy
 
@@ -141,12 +143,13 @@ Never store secrets. Store references to secret locations instead.
 For every inbound message:
 
 1. Build a compact query from the current user message and the current topic label.
-2. Filter search by current channel source identity first.
-3. If the user explicitly asks about broader history, search same user across channels.
-4. Use global search only for explicit global recall requests.
-5. Rank results by semantic relevance, lexical match, recency, unresolved status, and topic match.
-6. Return 2-6 chunks within budget.
-7. Deduplicate facts and prefer newer resolved decisions over older guesses.
+2. Search current user + current task/topic first.
+3. Apply channel source identity only when needed to avoid leaks, enforce isolation, or recover exact transcript records.
+4. If the user explicitly asks about broader history, search same user across channels.
+5. Use global search only for explicit global recall requests.
+6. Rank results by semantic relevance, lexical match, recency, unresolved status, and topic match.
+7. Return 2-6 chunks within budget.
+8. Deduplicate facts and prefer newer resolved decisions over older guesses.
 
 Return retrieval confidence with the assembled context. Low confidence must not be treated as valid memory. If confidence is low, expand source-filtered retrieval, search raw transcripts for exact details, or ask a concise clarification.
 
@@ -186,7 +189,7 @@ Validate these scenarios manually or with integration tests:
 - Long Telegram DM continues past the old compression threshold without full-history prompts.
 - User switches from "server deployment" to "vacation planning"; old server details do not enter prompt.
 - Old content from the same `chat_id` does not enter the prompt unless it matches current intent.
-- User later asks "what did we decide about deployment?"; relevant server summary is retrieved.
+- User later asks "what did we decide about deployment?"; current user/task/topic retrieval finds the relevant server summary.
 - User asks for an exact error from an old compressed turn; session search can recover it.
 - User asks for an old command that is absent from summaries; source-filtered transcript search runs before the answer.
 - Telegram group topic A does not see memory from topic B.

@@ -52,7 +52,8 @@ Reported behavior: gateway conversations may search globally across all sessions
 
 Implementation impact:
 
-- Retrieval must use current channel identity as a source and safety filter.
+- Retrieval must target current user + current task/topic first.
+- Channel identity is only a source and safety filter.
 - `chat_id` must not become a semantic context boundary.
 - Global retrieval must be explicit.
 - Source filtering should use the same identity fields as gateway session routing, not only `user_id`.

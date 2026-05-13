@@ -48,6 +48,7 @@ Consider the implementation ready only when:
 
 - gateway Telegram tests pass, not just CLI tests;
 - channel identity is used for source/safety filtering by default;
+- default retrieval target is current user + current task/topic;
 - `chat_id` alone never causes old content to enter the prompt;
 - compressed parent sessions remain searchable;
 - prompt assembly has a clear token budget report;

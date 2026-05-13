@@ -32,7 +32,7 @@ skills/hermes-retrieval-context
 Replace session-based prompt context with retrieval-based context assembly:
 
 ```text
-Telegram / Gateway -> Context Assembler -> Scoped Memory Retrieval -> LLM -> Memory Update
+Telegram / Gateway -> Context Assembler -> User/Task/Topic Retrieval -> LLM -> Memory Update
 ```
 
 The transcript remains complete and persisted. The main LLM prompt receives only the minimal context needed for the current turn:
@@ -45,11 +45,14 @@ The transcript remains complete and persisted. The main LLM prompt receives only
 
 Telegram is transport, not the meaning of the conversation. `chat_id` and thread IDs are source/safety filters for search and isolation; they are not semantic session boundaries.
 
+Default retrieval target is current user + current task/topic. Search current user/task/topic first, filtered by channel identity only when needed to avoid leaks or recover exact transcript records.
+
 ## Hard Requirements
 
 - Do not delete, truncate, or stop writing raw session transcripts.
 - Do not send full gateway chat history by default in normal turns.
 - Never use `chat_id` as a context boundary. Use platform/chat/thread/user identity only to filter search sources and enforce safety/isolation.
+- Default retrieval target must be current user + current task/topic, not current chat/thread.
 - Global recall must be explicit, not accidental.
 - Preserve recent tail and valid tool call/result pairs.
 - Store summaries/chunks with source identity, topic, source session IDs, and turn ranges.
@@ -67,7 +70,7 @@ Telegram is transport, not the meaning of the conversation. `chat_id` and thread
    - otherwise a gateway/agent boundary `ContextAssembler`;
    - patch `run_agent.py` only if no clean extension point exists.
 5. Implement bounded context assembly with a budget report.
-6. Add source-filtered memory retrieval and logical summary checkpoints.
+6. Add user/task/topic-first memory retrieval and logical summary checkpoints.
 7. Add exact-recall fallback through source-filtered transcript/session search.
 8. Add tests or manual verification for Telegram/gateway behavior.
 
@@ -78,7 +81,7 @@ The task is complete only when:
 - a normal Telegram turn no longer forwards full session history to the LLM;
 - long Telegram chats have bounded prompt token usage;
 - topic switches do not pull unrelated old topics into the prompt;
-- "what did we decide earlier?" searches the current channel source safely, but includes only chunks relevant to the current user intent;
+- "what did we decide earlier?" searches current user/task/topic first, with channel filtering only to avoid leaks or recover exact transcript records;
 - exact recall questions use transcript search when memory is insufficient;
 - broken auxiliary model config does not silently produce raw-preview memory as if it were valid;
 - compressed parent sessions remain searchable or have an equivalent exact recovery path;

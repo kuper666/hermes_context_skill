@@ -22,7 +22,7 @@ metadata:
 Change Hermes from session-based context to retrieval-based context:
 
 ```text
-Telegram / Gateway -> Context Assembler -> Scoped Memory Retrieval -> LLM -> Memory Update
+Telegram / Gateway -> Context Assembler -> User/Task/Topic Retrieval -> LLM -> Memory Update
 ```
 
 Core rule:
@@ -30,6 +30,8 @@ Core rule:
 ```text
 Every LLM call must be built from scratch. Never replay channel history.
 ```
+
+Default retrieval target is current user + current task/topic. Channel/chat identity is only a safety and source filter.
 
 The active chat transcript remains the durable audit log. The model prompt must contain only:
 
@@ -57,13 +59,14 @@ The active chat transcript remains the durable audit log. The model prompt must 
    - otherwise add a small Context Assembler in the gateway/agent boundary.
 6. Do not delete transcript persistence. Full chat history must remain searchable and auditable.
 7. Treat Telegram as transport only. `chat_id` is a source/safety filter, not a semantic context boundary.
+8. Search current user/task/topic first, filtered by channel identity only when needed to avoid leaks or recover exact transcript records.
 
 ## Required Behavior
 
 - Preserve all important prior context through durable summaries and searchable memory chunks.
 - Stop sending whole gateway chat history to the LLM on every turn.
 - Keep a configurable recent tail, defaulting to 6-12 user/assistant turns or less when the topic changes.
-- Use platform/chat/thread/user identity to filter search sources and enforce isolation, not to decide semantic relevance.
+- Target current user + current task/topic for retrieval; use platform/chat/thread identity only to filter sources and enforce isolation.
 - Support topic switches in the same Telegram chat without dragging unrelated prior topics into the prompt.
 - Update memory after meaningful state changes, decisions, user preferences, completed work, or unresolved tasks.
 - Keep tool call/result pairs valid whenever messages are trimmed or summarized.
@@ -112,13 +115,14 @@ Hard limits:
 
 ## Retrieval Rules
 
-1. Search within the current channel source first, but include only semantically relevant chunks.
-2. If confidence is low and the user asks about past work, expand to the same user across channels.
-3. Use global search only when explicitly requested or clearly necessary.
-4. Rank by semantic relevance, lexical match, recency, and unresolved-task flags.
-5. Deduplicate chunks that represent the same decision or fact.
-6. Include source metadata internally, but keep user-facing replies natural.
-7. When retrieved context is low-confidence, expand source-filtered search or ask for clarification instead of guessing.
+1. Search current user/task/topic first.
+2. Apply channel identity only as a safety/source filter to avoid leaks or recover exact transcript records.
+3. If confidence is low and the user asks about past work, expand to the same user across channels.
+4. Use global search only when explicitly requested or clearly necessary.
+5. Rank by semantic relevance, lexical match, recency, and unresolved-task flags.
+6. Deduplicate chunks that represent the same decision or fact.
+7. Include source metadata internally, but keep user-facing replies natural.
+8. When retrieved context is low-confidence, expand user/task/topic retrieval or ask for clarification instead of guessing.
 
 ## Summarization Rules
 
@@ -148,6 +152,7 @@ Do not mark implementation complete unless:
 - full transcript recovery works for exact details;
 - topic switches reduce unrelated context without losing recoverability.
 - `chat_id` never acts as the semantic context boundary for prompt inclusion.
+- default retrieval is current user + current task/topic, not current chat/thread.
 
 ## Known Hermes Pitfalls
 
@@ -165,7 +170,7 @@ Check these before claiming the migration is complete:
 - Same Telegram chat, long conversation: prompt token usage stays bounded.
 - Same Telegram chat, topic switch: old topic is not included unless requested.
 - Same Telegram chat, unrelated old topic: `chat_id` alone does not cause inclusion in the prompt.
-- User asks "what did we decide earlier?": relevant source-filtered summary is retrieved.
+- User asks "what did we decide earlier?": relevant current user/task/topic summary is retrieved.
 - User asks about exact old detail after compression: session search can recover it.
 - User asks for an exact command/ID/error absent from summaries: agent searches source-filtered transcript instead of guessing.
 - Group/thread chats: memory does not leak across users or threads.

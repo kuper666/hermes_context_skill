@@ -45,6 +45,8 @@ The full transcript remains persisted as the audit log. It is not deleted and sh
 
 Telegram is only the transport. `chat_id` is not a semantic session boundary and must not decide what enters the prompt by itself.
 
+Default retrieval target is current user + current task/topic. Channel/chat identity is only a safety and source filter.
+
 ## Why It Is Effective
 
 The skill changes the source of context:
@@ -53,7 +55,7 @@ The skill changes the source of context:
 session-based context -> retrieval-based context
 ```
 
-This means each turn receives a bounded, freshly assembled prompt instead of inheriting the entire growing chat. In practice this should reduce input token usage significantly in long Telegram chats while preserving recall through source-filtered memory, summaries, and transcript search.
+This means each turn receives a bounded, freshly assembled prompt instead of inheriting the entire growing chat. In practice this should reduce input token usage significantly in long Telegram chats while preserving recall through task/topic-based memory, summaries, and transcript search filtered by channel identity when needed.
 
 Expected impact:
 
@@ -107,9 +109,9 @@ https://github.com/kuper666/hermes_context_skill
 Use the skill in skills/hermes-retrieval-context.
 Read AGENT_TASK.md first.
 
-Modernize the installed Hermes gateway chat context flow so Telegram and other gateway channels stop sending full session history to the LLM on every turn. Every LLM call must be built from scratch; never replay channel history. Implement a bounded retrieval-based Context Assembler with source-filtered memory retrieval, recent tail preservation, logical summary checkpoints, transcript recovery for exact details, and explicit low-confidence fallback behavior.
+Modernize the installed Hermes gateway chat context flow so Telegram and other gateway channels stop sending full session history to the LLM on every turn. Every LLM call must be built from scratch; never replay channel history. Implement a bounded retrieval-based Context Assembler where retrieval targets current user + current task/topic first, with channel identity used only as a safety/source filter, plus recent tail preservation, logical summary checkpoints, transcript recovery for exact details, and explicit low-confidence fallback behavior.
 
-Do not delete or truncate raw transcripts. Do not use `chat_id` as a semantic context boundary; use it only as a source and safety filter for retrieval. Do not implement a broad rewrite. Inspect the installed Hermes version first, choose the least invasive integration point, and validate Telegram/gateway behavior.
+Do not delete or truncate raw transcripts. Do not use `chat_id` as a semantic context boundary; use it only to isolate data, avoid leaks, and recover exact transcript records. Do not implement a broad rewrite. Inspect the installed Hermes version first, choose the least invasive integration point, and validate Telegram/gateway behavior.
 ```
 
 ## Quality Guardrails
@@ -119,7 +121,7 @@ This skill is intentionally conservative. It requires the implementing agent to 
 - keeping raw transcripts searchable;
 - preserving a recent tail for conversational continuity;
 - storing exact critical details in summary chunks;
-- using channel identity only as a source/safety filter, not as the meaning of the current conversation;
+- targeting current user + current task/topic first, with channel identity only as a source/safety filter;
 - running source-filtered transcript search before answering exact recall questions when summaries are insufficient;
 - refusing to reconstruct exact old commands, IDs, errors, URLs, dates, or file paths from weak memory matches.
 

@@ -2,7 +2,7 @@
 
 ## What "Good Implementation" Means
 
-A good implementation is not "add summaries". It is a controlled context pipeline where every LLM request is assembled from explicit sources with clear budgets, scope, and fallback behavior.
+A good implementation is not "add summaries". It is a controlled context pipeline where every LLM request is assembled from explicit sources with clear budgets, source filters, and fallback behavior.
 
 Required properties:
 
@@ -10,6 +10,7 @@ Required properties:
 - Full gateway/session history is never sent by default in normal turns.
 - Recent tail, retrieved chunks, working summary, and current user message are separately tracked.
 - Current channel identity is the default source/safety filter for retrieval, not the semantic boundary for context.
+- Default retrieval target is current user + current task/topic.
 - Exact recovery from raw transcripts is available when summaries are not enough.
 - Low-confidence retrieval never becomes a guessed answer.
 - Every assembled prompt can produce a budget/debug report for inspection.
@@ -32,6 +33,7 @@ The agent must follow these rules after the migration:
 6. If two retrieved chunks conflict, prefer the newer resolved decision and mention uncertainty internally in logs/metadata.
 7. Never use global memory to answer a current-chat recall question unless the user explicitly asks for broad/global recall.
 8. Never use `chat_id` as a reason to include old content in the prompt. It can only restrict where retrieval searches.
+9. Search current user/task/topic first, filtered by channel identity only when needed to avoid leaks or recover exact transcript records.
 
 ## When To Expand Context
 
@@ -46,7 +48,7 @@ Expand beyond the default recent tail when the new user message contains:
 Expansion order:
 
 1. Add more recent tail within budget.
-2. Retrieve more chunks from the same channel source, filtered by semantic relevance.
+2. Retrieve more chunks for the same user/task/topic.
 3. Search raw transcripts for exact details.
 4. Ask a concise clarification only when retrieval cannot disambiguate safely.
 
@@ -112,7 +114,7 @@ Signals that lower confidence:
 - multiple unrelated topics match;
 - retrieved chunks are old and resolved;
 - exact values are absent;
-- source filter is broader than current channel identity;
+- search target is broader than current user/task/topic;
 - semantic match exists but lexical match is weak.
 
 ## Required Failure Behavior
@@ -133,6 +135,6 @@ The implementation is not ready until these pass:
 - A user changes topic in the same Telegram chat; unrelated chunks are absent from the assembled prompt.
 - Old content from the same `chat_id` is excluded when it is not relevant to current intent.
 - A user says "continue" after a short pause; recent tail expands enough to preserve continuity.
-- Two similar deployment topics exist; retrieval returns the chunk from the current Telegram chat/thread first.
+- Two similar deployment topics exist; retrieval returns the chunk for the current user/task/topic first.
 - Summarization failure does not erase the raw transcript or pretend memory was updated.
 - The assembled prompt report shows token budget, tail size, retrieved chunk count, and source filter.
